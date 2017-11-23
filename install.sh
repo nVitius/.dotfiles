@@ -19,6 +19,8 @@ keybase login nvitius
 
 ln -s $HOME/.dotfiles/zsh/zshrc $HOME/.zshrc
 ln -s $HOME/.dotfiles/.ssh $HOME/.ssh
+ln -s $HOME/.dotfiles/git/gitconfig $HOME/.gitconfig
+ln -s $HOME/.dotfiles/git/gitignore $HOME/.gitignore
 
 brew install bison oniguruma automake libtool
 ( cd /tmp && \
