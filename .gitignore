@@ -1,0 +1,8 @@
+antigen
+.ssh
+licenses/*
+!licenses/*.gpg
+fonts/op_mono/
+gpg/keys/*
+!gpg/keys/*.pub
+!gpg/keys/*.gpg

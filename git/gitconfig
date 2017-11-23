@@ -1,0 +1,8 @@
+[core]
+	excludesfile = /Users/mauricio/.gitignore
+	editor = /usr/bin/vim
+[user]
+	email = mauricio@chatmeter.com
+	name = mauricio
+[help]
+	autocorrect = 10

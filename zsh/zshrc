@@ -1,0 +1,21 @@
+source /usr/local/share/antigen/antigen.zsh
+
+antigen use oh-my-zsh
+
+antigen bundle git
+antigen bundle command-not-found
+antigen bundle zsh-users/zsh-syntax-highlighting
+
+antigen theme agnoster
+
+antigen apply
+
+# Remove user@host from prompt (for agnoster theme)
+DEFAULT_USER=$USER
+
+# Configure nvm
+export NVM_DIR="$HOME/.nvm"
+. "/usr/local/opt/nvm/nvm.sh"
+
+# Colors for jq compatability with Solarized theme
+JQ_COLORS="0;39:0;39:0;39:0;39:0;32:1;39:1;39"
