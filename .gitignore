@@ -6,3 +6,5 @@ fonts/op_mono/
 gpg/keys/*
 !gpg/keys/*.pub
 !gpg/keys/*.gpg
+vpn/*
+!vpn/*.gpg
