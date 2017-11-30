@@ -1,10 +1,10 @@
 antigen
 .ssh
 licenses/*
-!licenses/*.gpg
+!licenses/*.pgp
 fonts/op_mono/
 gpg/keys/*
 !gpg/keys/*.pub
-!gpg/keys/*.gpg
+!gpg/keys/*.pgp
 vpn/*
-!vpn/*.gpg
+!vpn/*.pgp
