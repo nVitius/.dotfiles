@@ -8,9 +8,7 @@ fonts/op_mono/
 gpg/keys/*
 !gpg/keys/*.pub
 !gpg/keys/*.pgp
-ssl/ca_certs/*
-!ssl/ca_certs/*.pgp
-ssl/client_certs/*
-!ssl/client_certs/*.pgp
+ssl/*
+!ssl/*.pgp
 vpn/*
 !vpn/*.pgp
