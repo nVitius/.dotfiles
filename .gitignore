@@ -4,7 +4,9 @@ antigen
 .ssh
 licenses/*
 !licenses/*.pgp
-fonts/op_mono/
+fonts/*
+!fonts/op_mono.tar.gz.pgp
+!fonts/source_code_pro_powerline
 gpg/keys/*
 !gpg/keys/*.pub
 !gpg/keys/*.pgp
