@@ -6,7 +6,7 @@ mkdir $HOME/.dotfiles/antigen && curl -L git.io/antigen > $HOME/.dotfiles/antige
 /usr/bin/ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
 
 brew install zsh antigen nvm httpie
-brew cask install iterm2 beardedspice keybase docker sizeup atom slack pass sshuttle
+brew cask install iterm2 beardedspice keybase gpg docker sizeup atom slack pass sshuttle
 
 sudo echo "/usr/local/bin/zsh" >> /etc/shells
 sudo chsh -s /usr/local/bin/zsh `whoami`
@@ -23,6 +23,7 @@ ln -s $HOME/.dotfiles/.ssh $HOME/.ssh
 ln -s $HOME/.dotfiles/git/gitconfig $HOME/.gitconfig
 ln -s $HOME/.dotfiles/git/gitignore $HOME/.gitignore
 ln -s $HOME/.dotfiles/kube $HOME/.kube
+mkdir $HOME/.gnupg && ln -s $HOME/.dotfiles/gpg/config/gpg.conf $HOME/.gnupg/gpg.conf
 
 brew install bison oniguruma automake libtool
 ( cd /tmp && \
