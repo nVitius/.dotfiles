@@ -8,6 +8,8 @@ fonts/op_mono/
 gpg/keys/*
 !gpg/keys/*.pub
 !gpg/keys/*.pgp
+kube/*
+!kube/config.pgp
 ssl/*
 !ssl/*.pgp
 vpn/*

@@ -16,11 +16,13 @@ keybase login nvitius
 (cd $HOME/.dotfiles/fonts && keybase pgp decrypt -i op_mono.tar.gz.gpg | tar -zxv)
 (cd $HOME/.dotfiles/licenses && keybase pgp decrypt -i SizeUp.sizeuplicense.gpg -o SizeUp.sizeuplicense)
 (cd $HOME/.dotfiles && keybase pgp decrypt -i ssh.tar.gz.gpg | tar -zxv)
+(cd $HOME/.dotfiles/kube && keybase pgp decrypt -i config.pgp -o config)
 
 ln -s $HOME/.dotfiles/zsh/zshrc $HOME/.zshrc
 ln -s $HOME/.dotfiles/.ssh $HOME/.ssh
 ln -s $HOME/.dotfiles/git/gitconfig $HOME/.gitconfig
 ln -s $HOME/.dotfiles/git/gitignore $HOME/.gitignore
+ln -s $HOME/.dotfiles/kube $HOME/.kube
 
 brew install bison oniguruma automake libtool
 ( cd /tmp && \
