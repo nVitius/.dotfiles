@@ -5,8 +5,8 @@ mkdir $HOME/.dotfiles/antigen && curl -L git.io/antigen > $HOME/.dotfiles/antige
 
 /usr/bin/ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
 
-brew install zsh antigen nvm httpie
-brew cask install iterm2 beardedspice keybase gpg docker sizeup atom slack pass sshuttle
+brew install zsh antigen nvm httpie gpg sshuttle pass
+brew cask install iterm2 beardedspice keybase docker sizeup atom slack intellij-idea
 
 sudo echo "/usr/local/bin/zsh" >> /etc/shells
 sudo chsh -s /usr/local/bin/zsh `whoami`
