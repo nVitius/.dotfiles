@@ -19,3 +19,5 @@ export NVM_DIR="$HOME/.nvm"
 
 # Colors for jq compatability with Solarized theme
 JQ_COLORS="0;39:0;39:0;39:0;39:0;32:1;39:1;39"
+
+export PATH="$PATH:./node_modules/.bin/"
