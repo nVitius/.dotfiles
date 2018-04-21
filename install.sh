@@ -23,6 +23,8 @@ ln -s $HOME/.dotfiles/.ssh $HOME
 ln -s $HOME/.dotfiles/git/gitconfig $HOME/.gitconfig
 ln -s $HOME/.dotfiles/git/gitignore $HOME/.gitignore
 ln -s $HOME/.dotfiles/kube $HOME/.kube
+ln -s $HOME/.dotfiles/fonts/op_mono/*.otf $HOME/Library/Fonts/
+ln -s $HOME/.dotfiles/fonts/source_code_pro_powerline/*.otf $HOME/Library/Fonts/
 mkdir $HOME/.gnupg && ln -s $HOME/.dotfiles/gpg/config/gpg.conf $HOME/.gnupg/gpg.conf
 
 brew install bison oniguruma automake libtool
