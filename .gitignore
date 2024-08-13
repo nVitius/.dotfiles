@@ -1,0 +1,9 @@
+vim/*
+!vim/vimrc
+
+zsh/*
+!zsh/zshenv
+!zsh/zshrc
+!zsh/.zshrc
+!zsh/.zsh_plugins.txt
+!zsh/.p10k.zsh
