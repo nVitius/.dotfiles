@@ -75,6 +75,7 @@ if [ "$ENV" = "wsl" ]; then
 elif [ "$ENV" = "mac-os" ]; then
   brew install --cask keybase
   if ! [ -x "$(command -v keybase)" ]; then
+    [ -d /usr/local/bin ] || sudo mkdir -p /usr/local/bin
     sudo ln -s /Applications/Keybase.app/Contents/SharedSupport/bin/keybase /usr/local/bin/keybase
     sudo ln -s /Applications/Keybase.app/Contents/SharedSupport/bin/git-remote-keybase /usr/local/bin/git-remote-keybase
   fi
