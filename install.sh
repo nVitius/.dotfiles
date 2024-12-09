@@ -4,9 +4,13 @@ set -eo pipefail
 trap "echo; exit" INT
 
 ENV=""
+STEPS=""
+
+ALL_STEPS=("tools", "node", "keybase", "gui")
 
 PARAMS=""
 # https://medium.com/@Drew_Stokes/bash-argument-parsing-54f3b81a6a8f
+#region Args
 while (( "$#" )); do
   case "$1" in
     -e|--env)
@@ -18,6 +22,19 @@ while (( "$#" )); do
         exit 1
       fi
       ;;
+    -s|--steps)
+      if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
+        IFS=',' read -ra STEPS <<< "$2"
+        shift 2
+      else
+        echo "Error: Argument for $1 is missing" >&2
+        exit 1
+      fi
+      ;;
+    --all)
+      STEPS=("${ALL_STEPS[@]}")
+      shift
+      ;;
     -*|--*=) # unsupported flags
       echo "Error: Unsupported flag $1" >&2
       exit 1
@@ -28,65 +45,83 @@ while (( "$#" )); do
       ;;
   esac
 done
+#endregion
 
 [ -z "$ENV" ] && { echo 'ENV not set: (-e | --env=<wsl|mac-os>)'; exit 1; }
 
 eval set -- "$PARAMS"
 
-# Install dependencies
-if [ "$ENV" = "wsl" ]; then
-  sudo apt update && \
-  sudo apt install curl git build-essential zip unzip awscli wget software-properties-common man-db vim
-fi
 
-# Install Brew
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-
-if [ "$ENV" = "wsl" ]; then
-  (echo; echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"') >> $HOME/.profile
-  eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-elif [ "$ENV" = "mac-os" ]; then
-  (echo; echo 'eval "$(/opt/homebrew/bin/brew shellenv)"') >> ~/.profile
-  eval "$(/opt/homebrew/bin/brew shellenv)"
-fi
-
-# Install zsh if not installed
-if ! [ -x "$(command -v zsh)" ]; then
-  brew install zsh
-fi
-
-# Install dev tools
-brew install nvm jq
-
-# Complete nvm setup
-mkdir ~/.nvm
-export NVM_DIR="$HOME/.nvm"
-echo '[ -s "$(brew --prefix nvm)/nvm.sh" ] && \. "$(brew --prefix nvm)/nvm.sh"' \
-    >> $HOME/.profile
-source $(brew --prefix nvm)/nvm.sh
-
-nvm install --lts
-
-if [ "$ENV" = "wsl" ]; then
-  curl --remote-name https://prerelease.keybase.io/keybase_amd64.deb && \
-  sudo apt install ./keybase_amd64.deb && \
-  run_keybase && \
-  rm keybase_amd64.deb && \
-  keybase login
-elif [ "$ENV" = "mac-os" ]; then
-  brew install --cask keybase
-  if ! [ -x "$(command -v keybase)" ]; then
-    [ -d /usr/local/bin ] || sudo mkdir -p /usr/local/bin
-    sudo ln -s /Applications/Keybase.app/Contents/SharedSupport/bin/keybase /usr/local/bin/keybase
-    sudo ln -s /Applications/Keybase.app/Contents/SharedSupport/bin/git-remote-keybase /usr/local/bin/git-remote-keybase
+#region Tools
+if [[ " ${STEPS[*]} " == *"tools"* ]]; then
+  # Install dependencies
+  if [ "$ENV" = "wsl" ]; then
+    sudo apt update && \
+    sudo apt install curl git build-essential zip unzip awscli wget software-properties-common man-db vim
   fi
-  keybase login
-fi
 
-# Install GUI apps
-if [ "$ENV" = "mac-os" ]; then
-  brew install --cask iterm2 docker
+  # Install Brew
+  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+  if [ "$ENV" = "wsl" ]; then
+    (echo; echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"') >> $HOME/.profile
+    eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+  elif [ "$ENV" = "mac-os" ]; then
+    (echo; echo 'eval "$(/opt/homebrew/bin/brew shellenv)"') >> ~/.profile
+    eval "$(/opt/homebrew/bin/brew shellenv)"
+  fi
+
+  # Install zsh if not installed
+  if ! [ -x "$(command -v zsh)" ]; then
+    brew install zsh
+  fi
+
+  brew install jq
 fi
+#endregion
+
+#region Node
+if [[ " ${STEPS[*]} " == *"node"* ]]; then
+  brew install nvm
+
+  # Complete nvm setup
+  mkdir ~/.nvm
+  export NVM_DIR="$HOME/.nvm"
+  echo '[ -s "$(brew --prefix nvm)/nvm.sh" ] && \. "$(brew --prefix nvm)/nvm.sh"' \
+      >> $HOME/.profile
+  source $(brew --prefix nvm)/nvm.sh
+
+  nvm install --lts
+fi
+#endregion
+
+#region Keybase
+if [[ " ${STEPS[*]} " == *"keybase"* ]]; then
+  if [ "$ENV" = "wsl" ]; then
+    curl --remote-name https://prerelease.keybase.io/keybase_amd64.deb && \
+    sudo apt install ./keybase_amd64.deb && \
+    run_keybase && \
+    rm keybase_amd64.deb && \
+    keybase login
+  elif [ "$ENV" = "mac-os" ]; then
+    brew install --cask keybase
+    if ! [ -x "$(command -v keybase)" ]; then
+      [ -d /usr/local/bin ] || sudo mkdir -p /usr/local/bin
+      sudo ln -s /Applications/Keybase.app/Contents/SharedSupport/bin/keybase /usr/local/bin/keybase
+      sudo ln -s /Applications/Keybase.app/Contents/SharedSupport/bin/git-remote-keybase /usr/local/bin/git-remote-keybase
+    fi
+    keybase login
+  fi
+fi
+#endregion
+
+#region GUI
+if [[ " ${STEPS[*]} " == *"gui"* ]]; then
+  if [ "$ENV" = "mac-os" ]; then
+    brew install --cask iterm2 docker
+  fi
+fi
+#endregion
 
 # Set default shell to zsh
 [ "$(grep /zsh$ /etc/shells | wc -l)" -eq 0 ] && echo $(which zsh) | sudo tee -a /etc/shells
