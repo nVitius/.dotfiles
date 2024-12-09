@@ -93,3 +93,7 @@ sudo chsh -s $(which zsh) $(whoami)
 
 ln -s $HOME/.dotfiles/zsh/zshenv $HOME/.zshenv
 
+if [ "$ENV" = "mac-os" ]; then
+  echo 'Launch iterm and run `p10k configure` to install fonts and configure iterm'
+fi
+
