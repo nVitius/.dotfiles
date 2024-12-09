@@ -6,6 +6,7 @@ trap "echo; exit" INT
 ENV=""
 
 PARAMS=""
+# https://medium.com/@Drew_Stokes/bash-argument-parsing-54f3b81a6a8f
 while (( "$#" )); do
   case "$1" in
     -e|--env)
