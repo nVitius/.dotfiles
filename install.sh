@@ -6,7 +6,7 @@ trap "echo; exit" INT
 ENV=""
 STEPS=""
 
-ALL_STEPS=("tools", "node", "keybase", "gui")
+ALL_STEPS=("tools", "node", "python", "keybase", "gui")
 
 PARAMS=""
 # https://medium.com/@Drew_Stokes/bash-argument-parsing-54f3b81a6a8f
@@ -92,6 +92,39 @@ if [[ " ${STEPS[*]} " == *"node"* ]]; then
   source $(brew --prefix nvm)/nvm.sh
 
   nvm install --lts
+fi
+#endregion
+
+#region Python
+if [[ " ${STEPS[*]} " == *"python"* ]]; then
+  if [ "$ENV" = "mac-os" ]; then
+    brew install openssl readline sqlite3 xz zlib tcl-tk@8
+  fi
+
+  if [ "$ENV" = "wsl" ]; then
+    sudo apt install build-essential libssl-dev zlib1g-dev \
+      libbz2-dev libreadline-dev libsqlite3-dev \
+      libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev
+  fi
+
+    brew install pyenv
+    echo 'export PYENV_ROOT="$HOME/.pyenv"' >> ~/.profile
+    echo '[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"' >> ~/.profile
+    echo 'eval "$(pyenv init -)"' >> ~/.profile
+    export PYENV_ROOT="$HOME/.pyenv"
+    eval "$(pyenv init -)"
+    [[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"
+
+    pyenv install 3.12
+    pyenv global 3.12
+
+    brew install pipx
+    echo 'export PATH="$PATH:$HOME/.local/bin"' >> ~/.profile
+    export PATH="$PATH:$HOME/.local/bin"
+
+    pipx install poetry
+    pip install poetry-plugin-pyenv
+    pip install poetry-dotenv-plugin
 fi
 #endregion
 
