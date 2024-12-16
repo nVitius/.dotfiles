@@ -76,7 +76,7 @@ if [[ " ${STEPS[*]} " == *"tools"* ]]; then
     brew install zsh
   fi
 
-  brew install jq
+  brew install jq tfenv
 fi
 #endregion
 
