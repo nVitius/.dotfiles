@@ -151,7 +151,7 @@ fi
 #region GUI
 if [[ " ${STEPS[*]} " == *"gui"* ]]; then
   if [ "$ENV" = "mac-os" ]; then
-    brew install --cask iterm2 docker
+    brew install --cask iterm2 docker clipy
   fi
 fi
 #endregion
