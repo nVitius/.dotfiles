@@ -77,6 +77,7 @@ if [[ " ${STEPS[*]} " == *"tools"* ]]; then
   fi
 
   brew install jq tfenv
+  brew install --cask ngrok
 fi
 #endregion
 
@@ -115,16 +116,22 @@ if [[ " ${STEPS[*]} " == *"python"* ]]; then
     eval "$(pyenv init -)"
     [[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"
 
+    pyenv install 2.7
     pyenv install 3.12
-    pyenv global 3.12
+    pyenv global 3.12 2.7
 
     brew install pipx
+    echo "export PIPX_DEFAULT_PYTHON='$(pyenv which python)'" >> ~/.profile
+
+
     echo 'export PATH="$PATH:$HOME/.local/bin"' >> ~/.profile
     export PATH="$PATH:$HOME/.local/bin"
 
     pipx install poetry
-    pip install poetry-plugin-pyenv
-    pip install poetry-dotenv-plugin
+    pipx inject poetry poetry-plugin-pyenv
+    pipx inject poetry poetry-dotenv-plugin
+
+    poetry config virtualenvs.prefer-active-python true
 fi
 #endregion
 
