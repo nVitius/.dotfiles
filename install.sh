@@ -1,6 +1,13 @@
 #!/bin/bash
 set -eo pipefail
-trap "echo; exit" INT
+
+cancel_install() {
+  echo
+  echo "Canceled."
+  exit 130
+}
+
+trap cancel_install INT
 
 ENV=""
 PRESET=""
@@ -8,6 +15,7 @@ DRY_RUN=false
 NON_INTERACTIVE=false
 ASSUME_YES=false
 LIST_ITEMS=false
+BOOTSTRAP_GUM=false
 VERBOSE=false
 LEGACY_STEPS_USED=false
 SELECTION_PROVIDED=false
@@ -21,11 +29,13 @@ PARAMS=()
 
 ALL_STEPS=("tools" "node" "python" "keybase" "gui")
 ALL_PRESETS=("minimal" "dev" "full")
+ALL_GROUPS=("tools" "shell" "node" "python" "keybase" "gui")
 ALL_ITEMS=(
   "tools:wsl-deps"
   "tools:homebrew"
   "tools:zsh"
   "tools:jq"
+  "tools:ripgrep"
   "tools:tfenv"
   "tools:ngrok"
   "shell:antidote"
@@ -47,6 +57,9 @@ ALL_ITEMS=(
 
 DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROFILE="$HOME/.profile"
+GUM_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/dotfiles/bin"
+GUM_BIN="$GUM_CACHE_DIR/gum"
+GUM_REPO="charmbracelet/gum"
 
 usage() {
   cat <<'EOF'
@@ -61,6 +74,7 @@ Options:
       --all                    Alias for --preset full
       --dry-run                Print the resolved plan without installing
       --list-items             Print available install items
+      --bootstrap-gum          Download gum into ~/.cache/dotfiles/bin
       --non-interactive        Fail instead of prompting
   -y, --yes                    Skip interactive confirmation
       --verbose                Print shell input as it is read
@@ -149,6 +163,7 @@ item_label() {
     tools:homebrew) echo "Install and initialize Homebrew" ;;
     tools:zsh) echo "Ensure zsh is available" ;;
     tools:jq) echo "Install jq" ;;
+    tools:ripgrep) echo "Install ripgrep" ;;
     tools:tfenv) echo "Install tfenv" ;;
     tools:ngrok) echo "Install ngrok" ;;
     shell:antidote) echo "Initialize Antidote submodule" ;;
@@ -170,6 +185,25 @@ item_label() {
   esac
 }
 
+group_label() {
+  case "$1" in
+    tools) echo "Tools" ;;
+    shell) echo "Shell" ;;
+    node) echo "Node" ;;
+    python) echo "Python" ;;
+    keybase) echo "Keybase" ;;
+    gui) echo "GUI Apps" ;;
+    *) echo "$1" ;;
+  esac
+}
+
+item_group() {
+  case "$1" in
+    *:*) printf '%s' "${1%%:*}" ;;
+    *) printf '%s' "$1" ;;
+  esac
+}
+
 item_supported_envs() {
   case "$1" in
     tools:wsl-deps) echo "wsl" ;;
@@ -187,12 +221,16 @@ item_supports_env() {
   return 1
 }
 
+item_in_group() {
+  [ "$(item_group "$1")" = "$2" ]
+}
+
 item_dependencies() {
   case "$1" in
     tools:homebrew)
       [ "$ENV" = "wsl" ] && echo "tools:wsl-deps"
       ;;
-    tools:zsh|tools:jq|tools:tfenv|tools:ngrok)
+    tools:zsh|tools:jq|tools:ripgrep|tools:tfenv|tools:ngrok)
       echo "tools:homebrew"
       ;;
     shell:zshenv)
@@ -239,17 +277,17 @@ preset_items() {
       echo "tools:homebrew tools:zsh shell:antidote shell:zshenv shell:default-zsh"
       ;;
     dev)
-      echo "tools:homebrew tools:zsh tools:jq tools:tfenv tools:ngrok shell:antidote shell:zshenv shell:default-zsh node:lts python:python-2.7 python:python-3.12 python:poetry"
+      echo "tools:homebrew tools:zsh tools:jq tools:ripgrep tools:tfenv tools:ngrok shell:antidote shell:zshenv shell:default-zsh node:lts python:python-2.7 python:python-3.12 python:poetry"
       ;;
     full)
-      echo "tools:homebrew tools:zsh tools:jq tools:tfenv tools:ngrok shell:antidote shell:zshenv shell:default-zsh node:lts python:python-2.7 python:python-3.12 python:poetry keybase:app gui:iterm2 gui:docker gui:clipy"
+      echo "tools:homebrew tools:zsh tools:jq tools:ripgrep tools:tfenv tools:ngrok shell:antidote shell:zshenv shell:default-zsh node:lts python:python-2.7 python:python-3.12 python:poetry keybase:app gui:iterm2 gui:docker gui:clipy"
       ;;
   esac
 }
 
 step_items() {
   case "$1" in
-    tools) echo "tools:homebrew tools:zsh tools:jq tools:tfenv tools:ngrok" ;;
+    tools) echo "tools:homebrew tools:zsh tools:jq tools:ripgrep tools:tfenv tools:ngrok" ;;
     node) echo "node:lts" ;;
     python) echo "python:python-2.7 python:python-3.12 python:poetry" ;;
     keybase) echo "keybase:app" ;;
@@ -305,18 +343,192 @@ detect_env() {
   fi
 }
 
+gum_bootstrap_command() {
+  echo "./install.sh --bootstrap-gum"
+}
+
+gum_platform() {
+  case "$(uname -s)" in
+    Darwin) echo "Darwin" ;;
+    Linux) echo "Linux" ;;
+    *)
+      echo "Error: unsupported gum platform: $(uname -s)" >&2
+      return 1
+      ;;
+  esac
+}
+
+gum_arch() {
+  case "$(uname -m)" in
+    arm64|aarch64) echo "arm64" ;;
+    x86_64|amd64) echo "x86_64" ;;
+    *)
+      echo "Error: unsupported gum architecture: $(uname -m)" >&2
+      return 1
+      ;;
+  esac
+}
+
+load_cached_gum() {
+  if [ -x "$GUM_BIN" ]; then
+    export PATH="$GUM_CACHE_DIR:$PATH"
+    return 0
+  fi
+
+  return 1
+}
+
+print_gum_bootstrap_guidance() {
+  echo "Interactive mode requires gum." >&2
+  echo "Run this once to install a cached gum binary:" >&2
+  echo "  $(gum_bootstrap_command)" >&2
+}
+
+verify_gum_archive() {
+  local archive_name="$1"
+  local checksums_file="$2"
+  local checksum_line
+
+  [ -f "$checksums_file" ] || return 0
+  checksum_line="$(grep " $archive_name$" "$checksums_file" || true)"
+  [ -n "$checksum_line" ] || return 0
+
+  if command -v shasum >/dev/null 2>&1; then
+    printf '%s\n' "$checksum_line" | shasum -a 256 -c -
+  elif command -v sha256sum >/dev/null 2>&1; then
+    printf '%s\n' "$checksum_line" | sha256sum -c -
+  fi
+}
+
+bootstrap_gum() {
+  local platform
+  local arch
+  local asset_fragment
+  local release_json
+  local asset_url
+  local checksum_url
+  local tmp_dir
+  local archive_name
+  local gum_path
+
+  command -v gum >/dev/null 2>&1 && return 0
+  load_cached_gum && return 0
+  command -v curl >/dev/null 2>&1 || { echo "Error: curl is required to bootstrap gum" >&2; return 1; }
+  command -v tar >/dev/null 2>&1 || { echo "Error: tar is required to bootstrap gum" >&2; return 1; }
+
+  platform="$(gum_platform)"
+  arch="$(gum_arch)"
+  asset_fragment="${platform}_${arch}"
+
+  tmp_dir="$(mktemp -d)"
+
+  echo "Fetching latest gum release metadata..."
+  release_json="$(curl -fsSL "https://api.github.com/repos/$GUM_REPO/releases/latest")"
+  asset_url="$(printf '%s\n' "$release_json" | \
+    grep '"browser_download_url":' | \
+    grep -i "$asset_fragment" | \
+    grep '\.tar\.gz"' | \
+    sed -E 's/.*"browser_download_url": "([^"]+)".*/\1/' | \
+    head -n 1 || true)"
+
+  if [ -z "$asset_url" ]; then
+    echo "Error: could not find a gum release asset for $asset_fragment" >&2
+    rm -rf "$tmp_dir"
+    return 1
+  fi
+
+  checksum_url="$(printf '%s\n' "$release_json" | \
+    grep '"browser_download_url":' | \
+    grep 'checksums.txt"' | \
+    sed -E 's/.*"browser_download_url": "([^"]+)".*/\1/' | \
+    head -n 1 || true)"
+
+  archive_name="$(basename "$asset_url")"
+  echo "Downloading $archive_name..."
+  curl -fsSL "$asset_url" -o "$tmp_dir/$archive_name"
+
+  if [ -n "$checksum_url" ]; then
+    curl -fsSL "$checksum_url" -o "$tmp_dir/checksums.txt"
+    (cd "$tmp_dir" && verify_gum_archive "$archive_name" "$tmp_dir/checksums.txt")
+  fi
+
+  tar -xzf "$tmp_dir/$archive_name" -C "$tmp_dir"
+  gum_path="$(find "$tmp_dir" -type f -name gum | head -n 1)"
+
+  if [ -z "$gum_path" ]; then
+    echo "Error: gum binary was not found in $archive_name" >&2
+    rm -rf "$tmp_dir"
+    return 1
+  fi
+
+  mkdir -p "$GUM_CACHE_DIR"
+  cp "$gum_path" "$GUM_BIN"
+  chmod +x "$GUM_BIN"
+  export PATH="$GUM_CACHE_DIR:$PATH"
+
+  echo "Installed gum to $GUM_BIN"
+  rm -rf "$tmp_dir"
+}
+
+ensure_gum_for_interactive() {
+  command -v gum >/dev/null 2>&1 && return 0
+  load_cached_gum && return 0
+
+  if [ "$DRY_RUN" = true ]; then
+    print_gum_bootstrap_guidance
+    return 1
+  fi
+
+  echo "gum is required for interactive selection. Installing a cached gum binary..."
+  bootstrap_gum || {
+    print_gum_bootstrap_guidance
+    return 1
+  }
+}
+
+gum_choose() {
+  local output
+  local status
+
+  set +e
+  output="$(gum choose "$@")"
+  status=$?
+  set -e
+
+  [ "$status" -eq 0 ] || cancel_install
+  GUM_RESULT="$output"
+}
+
+gum_confirm() {
+  local status
+
+  set +e
+  gum confirm "$@"
+  status=$?
+  set -e
+
+  case "$status" in
+    0) return 0 ;;
+    1) return 1 ;;
+    *) cancel_install ;;
+  esac
+}
+
 prompt_env() {
   local detected
   local answer
+  local options=()
   detected="$(detect_env)"
 
   while [ -z "$ENV" ]; do
-    if [ -n "$detected" ]; then
-      read -r -p "Environment [mac-os/wsl] ($detected): " answer || true
-      answer="${answer:-$detected}"
+    if [ "$detected" = "wsl" ]; then
+      options=("wsl" "mac-os")
     else
-      read -r -p "Environment [mac-os/wsl]: " answer || true
+      options=("mac-os" "wsl")
     fi
+
+    gum_choose --header "Environment" "${options[@]}"
+    answer="$GUM_RESULT"
 
     if is_valid_env "$answer"; then
       ENV="$answer"
@@ -329,72 +541,78 @@ prompt_env() {
 prompt_preset() {
   local choice
 
-  echo
-  echo "What do you want to install?"
-  echo "  1) Minimal shell setup"
-  echo "  2) Dev environment"
-  echo "  3) Full workstation"
-  echo "  4) Custom"
-
   while true; do
-    read -r -p "Selection (2): " choice || true
-    choice="${choice:-2}"
+    gum_choose \
+      --header "What do you want to install?" \
+      "minimal  Minimal shell setup" \
+      "dev      Dev environment" \
+      "full     Full workstation" \
+      "custom   Custom"
+    choice="$GUM_RESULT"
 
-    case "$choice" in
-      1|minimal) PRESET="minimal"; SELECTION_PROVIDED=true; return ;;
-      2|dev) PRESET="dev"; SELECTION_PROVIDED=true; return ;;
-      3|full) PRESET="full"; SELECTION_PROVIDED=true; return ;;
-      4|custom) prompt_custom_items; SELECTION_PROVIDED=true; return ;;
-      *) echo "Please choose 1, 2, 3, or 4." ;;
+    case "${choice%% *}" in
+      minimal) PRESET="minimal"; SELECTION_PROVIDED=true; return ;;
+      dev) PRESET="dev"; SELECTION_PROVIDED=true; return ;;
+      full) PRESET="full"; SELECTION_PROVIDED=true; return ;;
+      custom) prompt_custom_items; SELECTION_PROVIDED=true; return ;;
     esac
   done
 }
 
 prompt_custom_items() {
-  local supported_items=()
-  local item
-  local index=1
-  local answer
-  local token
-  local parsed=()
+  local group
 
   echo
-  echo "Select install items:"
-  for item in "${ALL_ITEMS[@]}"; do
-    if item_supports_env "$item"; then
-      supported_items+=("$item")
-      printf '  %2d) %-22s %s\n' "$index" "$item" "$(item_label "$item")"
-      index=$((index + 1))
-    fi
+  echo "Select custom install items by group. Use space to select, enter to continue."
+
+  for group in "${ALL_GROUPS[@]}"; do
+    prompt_custom_group_items "$group"
   done
 
-  while true; do
-    read -r -p "Items by number, comma-separated (or all): " answer || true
-    answer="$(clean_token "$answer")"
-
-    if [ "$answer" = "all" ]; then
-      for item in "${supported_items[@]}"; do
-        append_unique_requested_item "$item"
-      done
+  if [ "${#REQUESTED_ITEMS[@]}" -eq 0 ]; then
+    echo
+    if gum_confirm "No custom items selected. Start over?"; then
+      prompt_custom_items
       return
     fi
 
-    if [ -z "$answer" ]; then
-      echo "Please choose at least one item."
-      continue
+    cancel_install
+  fi
+}
+
+prompt_custom_group_items() {
+  local group="$1"
+  local supported_items=()
+  local choices=()
+  local item
+  local selected
+  local selected_output
+
+  for item in "${ALL_ITEMS[@]}"; do
+    if item_in_group "$item" "$group" && item_supports_env "$item"; then
+      supported_items+=("$item")
+      choices+=("$(printf '%-22s %s' "$item" "$(item_label "$item")")")
     fi
-
-    IFS=',' read -ra parsed <<< "$answer"
-    for token in "${parsed[@]}"; do
-      if [[ "$token" =~ ^[0-9]+$ ]] && [ "$token" -ge 1 ] && [ "$token" -le "${#supported_items[@]}" ]; then
-        append_unique_requested_item "${supported_items[$((token - 1))]}"
-      else
-        echo "Ignoring invalid selection: $token"
-      fi
-    done
-
-    [ "${#REQUESTED_ITEMS[@]}" -gt 0 ] && return
   done
+
+  if [ "${#supported_items[@]}" -eq 0 ]; then
+    echo "$(group_label "$group")"
+    echo "  No supported items for $ENV."
+    return
+  fi
+
+  gum_choose \
+    --no-limit \
+    --header "$(group_label "$group")" \
+    "${choices[@]}"
+  selected_output="$GUM_RESULT"
+
+  [ -z "$selected_output" ] && return
+
+  while IFS= read -r selected; do
+    [ -z "$selected" ] && continue
+    append_unique_requested_item "${selected%% *}"
+  done <<< "$selected_output"
 }
 
 confirm_plan() {
@@ -587,6 +805,10 @@ install_jq() {
   brew install jq
 }
 
+install_ripgrep() {
+  brew install ripgrep
+}
+
 install_tfenv() {
   brew install tfenv
 }
@@ -715,6 +937,7 @@ run_item() {
     tools:homebrew) install_homebrew ;;
     tools:zsh) install_zsh ;;
     tools:jq) install_jq ;;
+    tools:ripgrep) install_ripgrep ;;
     tools:tfenv) install_tfenv ;;
     tools:ngrok) install_ngrok ;;
     shell:antidote) install_antidote ;;
@@ -849,6 +1072,10 @@ while (( "$#" )); do
       LIST_ITEMS=true
       shift
       ;;
+    --bootstrap-gum)
+      BOOTSTRAP_GUM=true
+      shift
+      ;;
     --non-interactive)
       NON_INTERACTIVE=true
       shift
@@ -876,6 +1103,15 @@ done
 [ "$VERBOSE" = true ] && set -v
 set -- "${PARAMS[@]}"
 
+if [ "$BOOTSTRAP_GUM" = true ]; then
+  if [ "$DRY_RUN" = true ]; then
+    echo "Would install gum to $GUM_BIN"
+  else
+    bootstrap_gum
+  fi
+  exit 0
+fi
+
 if [ "$LIST_ITEMS" = true ]; then
   if [ -n "$ENV" ] && ! is_valid_env "$ENV"; then
     echo 'Error: ENV must be one of: wsl, mac-os' >&2
@@ -884,6 +1120,10 @@ if [ "$LIST_ITEMS" = true ]; then
 
   print_items
   exit 0
+fi
+
+if { [ -z "$ENV" ] || [ "$SELECTION_PROVIDED" = false ]; } && [ "$NON_INTERACTIVE" = false ]; then
+  ensure_gum_for_interactive || exit 1
 fi
 
 if [ -z "$ENV" ]; then
