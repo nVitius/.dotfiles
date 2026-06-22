@@ -53,6 +53,7 @@ ALL_ITEMS=(
   "gui:iterm2"
   "gui:docker"
   "gui:clipy"
+  "gui:tailscale"
 )
 
 DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -181,6 +182,7 @@ item_label() {
     gui:iterm2) echo "Install iTerm2" ;;
     gui:docker) echo "Install Docker Desktop" ;;
     gui:clipy) echo "Install Clipy" ;;
+    gui:tailscale) echo "Install Tailscale" ;;
     *) echo "$1" ;;
   esac
 }
@@ -207,7 +209,7 @@ item_group() {
 item_supported_envs() {
   case "$1" in
     tools:wsl-deps) echo "wsl" ;;
-    tools:ngrok|gui:iterm2|gui:docker|gui:clipy) echo "mac-os" ;;
+    tools:ngrok|gui:iterm2|gui:docker|gui:clipy|gui:tailscale) echo "mac-os" ;;
     *) echo "wsl mac-os" ;;
   esac
 }
@@ -265,7 +267,7 @@ item_dependencies() {
       [ "$ENV" = "mac-os" ] && echo "tools:homebrew"
       [ "$ENV" = "wsl" ] && echo "tools:wsl-deps"
       ;;
-    gui:iterm2|gui:docker|gui:clipy)
+    gui:iterm2|gui:docker|gui:clipy|gui:tailscale)
       echo "tools:homebrew"
       ;;
   esac
@@ -280,7 +282,7 @@ preset_items() {
       echo "tools:homebrew tools:zsh tools:jq tools:ripgrep tools:tfenv tools:ngrok shell:antidote shell:zshenv shell:default-zsh node:lts python:python-2.7 python:python-3.12 python:poetry"
       ;;
     full)
-      echo "tools:homebrew tools:zsh tools:jq tools:ripgrep tools:tfenv tools:ngrok shell:antidote shell:zshenv shell:default-zsh node:lts python:python-2.7 python:python-3.12 python:poetry keybase:app gui:iterm2 gui:docker gui:clipy"
+      echo "tools:homebrew tools:zsh tools:jq tools:ripgrep tools:tfenv tools:ngrok shell:antidote shell:zshenv shell:default-zsh node:lts python:python-2.7 python:python-3.12 python:poetry keybase:app gui:iterm2 gui:docker gui:clipy gui:tailscale"
       ;;
   esac
 }
@@ -291,7 +293,7 @@ step_items() {
     node) echo "node:lts" ;;
     python) echo "python:python-2.7 python:python-3.12 python:poetry" ;;
     keybase) echo "keybase:app" ;;
-    gui) echo "gui:iterm2 gui:docker gui:clipy" ;;
+    gui) echo "gui:iterm2 gui:docker gui:clipy gui:tailscale" ;;
   esac
 }
 
@@ -926,6 +928,10 @@ install_clipy() {
   brew install --cask clipy
 }
 
+install_tailscale() {
+  brew install --cask tailscale-app
+}
+
 run_item() {
   local item="$1"
 
@@ -955,6 +961,7 @@ run_item() {
     gui:iterm2) install_iterm2 ;;
     gui:docker) install_docker ;;
     gui:clipy) install_clipy ;;
+    gui:tailscale) install_tailscale ;;
   esac
 }
 
