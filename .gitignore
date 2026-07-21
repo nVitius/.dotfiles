@@ -6,4 +6,5 @@ zsh/*
 !zsh/zshrc
 !zsh/.zshrc
 !zsh/.zsh_plugins.txt
-!zsh/.p10k.zsh
+!zsh/.p10k-dark.zsh
+!zsh/.p10k-light.zsh
