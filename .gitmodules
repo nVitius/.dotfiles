@@ -1,4 +1,4 @@
 [submodule "antidote"]
 	path = antidote
-	url = https://github.com/mattmc3/antidote.git
+	url = git@github.com:mattmc3/antidote.git
 	shallow = true

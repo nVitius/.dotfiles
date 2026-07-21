@@ -8,14 +8,16 @@ if empty(glob(data_dir . '/autoload/plug.vim'))
   autocmd VimEnter * PlugInstall --sync | source $MYVIMRC
 endif
 
+let g:plug_url_format = 'git@github.com:%s.git'
+
 call plug#begin('~/.dotfiles/vim/plugged')
 Plug 'ericbn/vim-solarized'
 
-" Shorthand notation; fetches https://github.com/junegunn/vim-easy-align
+" Shorthand notation; fetches git@github.com:junegunn/vim-easy-align.git
 Plug 'junegunn/vim-easy-align'
 
 " Any valid git URL is allowed
-Plug 'https://github.com/junegunn/vim-github-dashboard.git'
+Plug 'git@github.com:junegunn/vim-github-dashboard.git'
 
 " Multiple Plug commands can be written in a single line using | separators
 " Plug 'SirVer/ultisnips' | Plug 'honza/vim-snippets'
@@ -33,8 +35,8 @@ Plug 'fatih/vim-go', { 'tag': '*' }
 " Plugin options
 Plug 'nsf/gocode', { 'tag': 'v.20150303', 'rtp': 'vim' }
 
-" Plugin outside ~/.vim/plugged with post-update hook
-Plug 'junegunn/fzf', { 'dir': '~/.fzf', 'do': './install --all' }
+" fzf - clone via SSH and build from source (requires Go)
+Plug 'junegunn/fzf', { 'dir': '~/.fzf', 'do': 'go build -o bin/fzf . && ./install --bin' }
 
 " Unmanaged plugin (manually installed and updated)
 Plug '~/my-prototype-plugin'
