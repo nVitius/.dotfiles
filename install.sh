@@ -1,9 +1,10 @@
 #!/bin/bash
-set -eo pipefail
+set -Eeo pipefail
 
 cancel_install() {
   echo
   echo "Canceled."
+  print_resume_guidance
   exit 130
 }
 
@@ -16,15 +17,24 @@ NON_INTERACTIVE=false
 ASSUME_YES=false
 LIST_ITEMS=false
 BOOTSTRAP_GUM=false
+RESUME=false
+RESUMING=false
+DISCARD_STATE=false
 VERBOSE=false
 LEGACY_STEPS_USED=false
 SELECTION_PROVIDED=false
+ENV_PROVIDED=false
+INSTALL_STATE_ACTIVE=false
+INSTALL_STARTED_AT=""
+INSTALLER_REVISION=""
+CURRENT_ITEM=""
 
 STEPS=()
 REQUESTED_ITEMS=()
 RESOLVED_ITEMS=()
 RESOLVING_ITEMS=()
 SKIPPED_ITEMS=()
+COMPLETED_ITEMS=()
 PARAMS=()
 
 ALL_STEPS=("tools" "node" "python" "keybase" "gui")
@@ -61,6 +71,9 @@ PROFILE="$HOME/.profile"
 GUM_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/dotfiles/bin"
 GUM_BIN="$GUM_CACHE_DIR/gum"
 GUM_REPO="charmbracelet/gum"
+STATE_DIR="${DOTFILES_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles}"
+STATE_FILE="$STATE_DIR/install.state"
+STATE_VERSION="1"
 
 usage() {
   cat <<'EOF'
@@ -76,6 +89,8 @@ Options:
       --dry-run                Print the resolved plan without installing
       --list-items             Print available install items
       --bootstrap-gum          Download gum into ~/.cache/dotfiles/bin
+      --resume                 Resume the saved install plan
+      --discard-state          Delete saved install progress and exit
       --non-interactive        Fail instead of prompting
   -y, --yes                    Skip interactive confirmation
       --verbose                Print shell input as it is read
@@ -106,6 +121,11 @@ append_unique_resolved_item() {
 append_unique_skipped_item() {
   local item="$1"
   contains "$item" "${SKIPPED_ITEMS[@]}" || SKIPPED_ITEMS+=("$item")
+}
+
+append_unique_completed_item() {
+  local item="$1"
+  contains "$item" "${COMPLETED_ITEMS[@]}" || COMPLETED_ITEMS+=("$item")
 }
 
 clean_token() {
@@ -343,6 +363,181 @@ detect_env() {
   else
     echo ""
   fi
+}
+
+installer_revision() {
+  if command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$DOTFILES_DIR/install.sh" | awk '{print $1}'
+  elif command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$DOTFILES_DIR/install.sh" | awk '{print $1}'
+  else
+    echo "unknown"
+  fi
+}
+
+has_install_state() {
+  [ -f "$STATE_FILE" ]
+}
+
+print_resume_guidance() {
+  if [ "$INSTALL_STATE_ACTIVE" = true ] && has_install_state; then
+    echo "Progress was saved. Resume with:"
+    echo "  ./install.sh --resume"
+  fi
+}
+
+write_install_state() {
+  local tmp_file="$STATE_FILE.tmp.$$"
+  local item
+
+  mkdir -p "$STATE_DIR"
+  [ -n "$INSTALLER_REVISION" ] || INSTALLER_REVISION="$(installer_revision)"
+
+  (
+    umask 077
+    {
+      printf 'version\t%s\n' "$STATE_VERSION"
+      printf 'environment\t%s\n' "$ENV"
+      printf 'started_at\t%s\n' "$INSTALL_STARTED_AT"
+      printf 'installer_revision\t%s\n' "$INSTALLER_REVISION"
+      for item in "${RESOLVED_ITEMS[@]}"; do
+        printf 'item\t%s\n' "$item"
+      done
+      for item in "${COMPLETED_ITEMS[@]}"; do
+        printf 'completed\t%s\n' "$item"
+      done
+    } > "$tmp_file"
+  )
+
+  mv "$tmp_file" "$STATE_FILE"
+  INSTALL_STATE_ACTIVE=true
+}
+
+initialize_install_state() {
+  COMPLETED_ITEMS=()
+  INSTALL_STARTED_AT="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  write_install_state
+}
+
+load_install_state() {
+  local record_type
+  local value
+  local saved_version=""
+  local saved_env=""
+  local saved_revision=""
+  local saved_items=()
+  local saved_completed=()
+  local item
+  local current_revision
+
+  if ! has_install_state; then
+    echo "Error: no saved install progress found at $STATE_FILE" >&2
+    exit 1
+  fi
+
+  while IFS=$'\t' read -r record_type value; do
+    case "$record_type" in
+      version) saved_version="$value" ;;
+      environment) saved_env="$value" ;;
+      started_at) INSTALL_STARTED_AT="$value" ;;
+      installer_revision) saved_revision="$value" ;;
+      item) saved_items+=("$value") ;;
+      completed) saved_completed+=("$value") ;;
+      "") ;;
+      *)
+        echo "Error: invalid record in saved install state: $record_type" >&2
+        exit 1
+        ;;
+    esac
+  done < "$STATE_FILE"
+
+  if [ "$saved_version" != "$STATE_VERSION" ]; then
+    echo "Error: unsupported install state version: ${saved_version:-missing}" >&2
+    exit 1
+  fi
+
+  if [ -z "$saved_revision" ]; then
+    echo "Error: saved install state has no installer revision" >&2
+    exit 1
+  fi
+
+  if ! is_valid_env "$saved_env"; then
+    echo "Error: invalid environment in saved install state: ${saved_env:-missing}" >&2
+    exit 1
+  fi
+
+  if [ "${#saved_items[@]}" -eq 0 ]; then
+    echo "Error: saved install state contains no items" >&2
+    exit 1
+  fi
+
+  for item in "${saved_items[@]}"; do
+    if ! is_valid_item "$item"; then
+      echo "Error: invalid item in saved install state: $item" >&2
+      exit 1
+    fi
+  done
+
+  for item in "${saved_completed[@]}"; do
+    if ! contains "$item" "${saved_items[@]}"; then
+      echo "Error: completed item is not in the saved install plan: $item" >&2
+      exit 1
+    fi
+  done
+
+  ENV="$saved_env"
+  INSTALLER_REVISION="$saved_revision"
+  REQUESTED_ITEMS=()
+  COMPLETED_ITEMS=()
+  for item in "${saved_items[@]}"; do
+    append_unique_requested_item "$item"
+  done
+  for item in "${saved_completed[@]}"; do
+    append_unique_completed_item "$item"
+  done
+
+  current_revision="$(installer_revision)"
+  if [ -n "$saved_revision" ] && [ "$saved_revision" != "$current_revision" ]; then
+    echo "Warning: install.sh changed since this progress was saved." >&2
+    echo "Review the resolved plan before continuing." >&2
+  fi
+
+  SELECTION_PROVIDED=true
+  RESUMING=true
+  INSTALL_STATE_ACTIVE=true
+}
+
+mark_item_completed() {
+  append_unique_completed_item "$1"
+  write_install_state
+}
+
+discard_install_state() {
+  if has_install_state; then
+    rm -f "$STATE_FILE"
+    echo "Discarded saved install progress at $STATE_FILE"
+  else
+    echo "No saved install progress found at $STATE_FILE"
+  fi
+}
+
+finish_install_state() {
+  rm -f "$STATE_FILE"
+  INSTALL_STATE_ACTIVE=false
+}
+
+install_failed() {
+  local status="$1"
+  trap - ERR
+
+  echo >&2
+  if [ -n "$CURRENT_ITEM" ]; then
+    echo "Install failed while running $CURRENT_ITEM." >&2
+  else
+    echo "Install failed." >&2
+  fi
+  print_resume_guidance >&2
+  exit "$status"
 }
 
 gum_bootstrap_command() {
@@ -714,14 +909,38 @@ resolve_requested_items() {
 
 print_plan() {
   local item
+  local remaining_count=0
 
   echo
   echo "Environment: $ENV"
-  echo
-  echo "Will run:"
+
+  if [ "${#COMPLETED_ITEMS[@]}" -gt 0 ]; then
+    echo
+    echo "Already completed:"
+    for item in "${RESOLVED_ITEMS[@]}"; do
+      if contains "$item" "${COMPLETED_ITEMS[@]}"; then
+        printf '  - %-22s %s\n' "$item" "$(item_label "$item")"
+      fi
+    done
+  fi
+
   for item in "${RESOLVED_ITEMS[@]}"; do
-    printf '  - %-22s %s\n' "$item" "$(item_label "$item")"
+    if ! contains "$item" "${COMPLETED_ITEMS[@]}"; then
+      remaining_count=$((remaining_count + 1))
+    fi
   done
+
+  echo
+  if [ "$remaining_count" -gt 0 ]; then
+    echo "Will run:"
+    for item in "${RESOLVED_ITEMS[@]}"; do
+      if ! contains "$item" "${COMPLETED_ITEMS[@]}"; then
+        printf '  - %-22s %s\n' "$item" "$(item_label "$item")"
+      fi
+    done
+  else
+    echo "All install items are complete; will finish post-install setup."
+  fi
 
   if [ "${#SKIPPED_ITEMS[@]}" -gt 0 ]; then
     echo
@@ -989,6 +1208,7 @@ while (( "$#" )); do
     -e|--env)
       if [ -n "$2" ] && [ "${2:0:1}" != "-" ]; then
         ENV="$2"
+        ENV_PROVIDED=true
         shift 2
       else
         echo "Error: Argument for $1 is missing" >&2
@@ -998,6 +1218,7 @@ while (( "$#" )); do
     --env=*)
       if [ -n "${1#*=}" ]; then
         ENV="${1#*=}"
+        ENV_PROVIDED=true
       else
         echo "Error: Argument for --env is missing" >&2
         exit 1
@@ -1083,6 +1304,14 @@ while (( "$#" )); do
       BOOTSTRAP_GUM=true
       shift
       ;;
+    --resume)
+      RESUME=true
+      shift
+      ;;
+    --discard-state)
+      DISCARD_STATE=true
+      shift
+      ;;
     --non-interactive)
       NON_INTERACTIVE=true
       shift
@@ -1110,6 +1339,21 @@ done
 [ "$VERBOSE" = true ] && set -v
 set -- "${PARAMS[@]}"
 
+if [ "$RESUME" = true ] && { [ "$ENV_PROVIDED" = true ] || [ "$SELECTION_PROVIDED" = true ]; }; then
+  echo "Error: --resume cannot be combined with --env, --preset, --items, --steps, or --all" >&2
+  exit 1
+fi
+
+if [ "$RESUME" = true ] && [ "$DISCARD_STATE" = true ]; then
+  echo "Error: --resume cannot be combined with --discard-state" >&2
+  exit 1
+fi
+
+if [ "$DISCARD_STATE" = true ]; then
+  discard_install_state
+  exit 0
+fi
+
 if [ "$BOOTSTRAP_GUM" = true ]; then
   if [ "$DRY_RUN" = true ]; then
     echo "Would install gum to $GUM_BIN"
@@ -1127,6 +1371,17 @@ if [ "$LIST_ITEMS" = true ]; then
 
   print_items
   exit 0
+fi
+
+if [ "$RESUME" = true ]; then
+  load_install_state
+elif [ -z "$ENV" ] && [ "$SELECTION_PROVIDED" = false ] && [ "$NON_INTERACTIVE" = false ] && has_install_state; then
+  ensure_gum_for_interactive || exit 1
+  if gum_confirm "Found unfinished install progress. Resume it?"; then
+    load_install_state
+  else
+    echo "Starting a new install. Saved progress will be replaced after confirmation."
+  fi
 fi
 
 if { [ -z "$ENV" ] || [ "$SELECTION_PROVIDED" = false ]; } && [ "$NON_INTERACTIVE" = false ]; then
@@ -1165,8 +1420,28 @@ fi
 
 confirm_plan
 
+if [ "$RESUMING" = false ]; then
+  initialize_install_state
+fi
+
+trap 'install_failed "$?"' ERR
+
 for item in "${RESOLVED_ITEMS[@]}"; do
+  if contains "$item" "${COMPLETED_ITEMS[@]}"; then
+    continue
+  fi
+
+  CURRENT_ITEM="$item"
   run_item "$item"
+  mark_item_completed "$item"
 done
 
+CURRENT_ITEM="post-install setup"
 post_install
+CURRENT_ITEM="saved install state cleanup"
+finish_install_state
+CURRENT_ITEM=""
+trap - ERR
+
+echo
+echo "Installation complete."
